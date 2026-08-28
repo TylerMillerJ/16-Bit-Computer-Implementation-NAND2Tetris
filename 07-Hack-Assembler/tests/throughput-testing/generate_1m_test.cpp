@@ -1,10 +1,19 @@
 // generate_1m_test.cpp
 //
 // Generates LargeTest1M.asm in the current directory: 1,000,000 lines,
-// using 30,000 unique symbols -- the maximum realistic symbol count for
-// the Hack platform (16-bit address space, usable RAM addresses 0-32767).
+// using 16,000 unique symbols -- just below the true maximum realistic
+// symbol count for the Hack platform.
 //
-//   500,000 A-instructions referencing 30,000 unique symbols
+// NOTE ON THE MAX: physical Hack RAM only spans addresses 0-24576, not
+// the full 15-bit address space (0-32767). The first 16 addresses
+// (R0-R15) are reserved for predefined symbols, and addresses
+// 16384-24576 are memory-mapped to the screen and keyboard, leaving
+// only addresses 16-16383 (16,368 addresses) for variable declarations.
+// A previous version of this generator used 30,000 unique symbols,
+// which exceeds this real limit and is not achievable on actual Hack
+// hardware without colliding with screen/keyboard memory.
+//
+//   500,000 A-instructions referencing 16,000 unique symbols
 //   500,000 random valid C-instructions
 //
 // Build:
@@ -21,7 +30,7 @@
 
 int main() {
     const int SYMBOL_LINES = 500000;
-    const int UNIQUE_SYMBOLS = 30000;
+    const int UNIQUE_SYMBOLS = 16000; // must stay below 16,368 usable addresses
     const int C_LINES = 500000;
 
     std::mt19937 rng(42); // seeded for reproducibility

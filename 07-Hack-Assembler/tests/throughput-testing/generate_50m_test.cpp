@@ -3,17 +3,18 @@
 // Generates LargeTest50M.asm in the current directory: 50,000,000 lines.
 // BEWARE: this produces a large file and can take a while to run.
 //
-// Uses 30,000 unique symbols -- the maximum realistic symbol count for
-// the Hack platform (16-bit address space, usable RAM addresses 0-32767).
-// A previous version of this generator used 2.5 million unique symbols,
-// which is not representable on real Hack hardware and caused the
-// assembler to correctly abort with a "Memory Exhausted" error once RAM
-// addresses exceeded 32767. This version stresses the symbol table with
-// a valid maximum symbol count instead, backed by many more references
-// and C-instructions to still reach 50,000,000 total lines.
+// Uses 16,000 unique symbols -- just below the true maximum realistic
+// symbol count for the Hack platform. Physical Hack RAM only spans
+// addresses 0-24576 (not the full 15-bit space, 0-32767): the first 16
+// addresses (R0-R15) are reserved for predefined symbols, and addresses
+// 16384-24576 are memory-mapped to the screen and keyboard. That leaves
+// only 16,368 addresses (16-16383) available for variable declarations.
+// A previous version of this generator used 30,000 unique symbols,
+// which exceeds this real limit and cannot be represented on actual
+// Hack hardware without colliding with screen/keyboard memory.
 //
-//   30,000 unique label declarations
-//   24,970,000 symbolic A-instructions (referencing those labels)
+//   16,000 unique label declarations
+//   25,484,000 symbolic A-instructions (referencing those labels)
 //   25,000,000 random C-instructions
 //
 // Build:
@@ -33,8 +34,8 @@
 int main() {
     const char* OUT = "LargeTest50M.asm";
 
-    const long long UNIQUE_SYMBOLS = 30'000;
-    const long long SYMBOL_REFS = 24'970'000;
+    const long long UNIQUE_SYMBOLS = 16'000;
+    const long long SYMBOL_REFS = 24'984'000;
     const long long C_INSTRUCTIONS = 25'000'000;
     const long long TOTAL = UNIQUE_SYMBOLS + SYMBOL_REFS + C_INSTRUCTIONS;
 
@@ -65,7 +66,7 @@ int main() {
     std::vector<char> buf(1 << 20); // 1 MB buffer
     out.rdbuf()->pubsetbuf(buf.data(), buf.size());
 
-    // 2.5 million unique label declarations
+    // 16,000 unique label declarations
     for (long long i = 0; i < UNIQUE_SYMBOLS; ++i) {
         out << "(SYMBOL_" << i << ")\n";
         if ((i + 1) % 500'000 == 0) {
@@ -73,7 +74,7 @@ int main() {
         }
     }
 
-    // 22.5 million symbolic A-instructions
+    // ~25 million symbolic A-instructions
     for (long long i = 0; i < SYMBOL_REFS; ++i) {
         long long symbol = symDist(rng);
         out << "@SYMBOL_" << symbol << "\n";

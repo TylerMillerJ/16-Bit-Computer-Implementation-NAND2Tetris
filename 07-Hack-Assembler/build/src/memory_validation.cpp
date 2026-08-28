@@ -33,7 +33,7 @@ uint16_t assignValidMemoryAddress(){ //find a value that is valid and not taken
 }
 
 bool addressIsNotUsed(uint16_t target){
-    for (uint16_t address : directlyUsedAddresses){
+    for (uint16_t& address : directlyUsedAddresses){
         if (address == target){
             return false;
           }

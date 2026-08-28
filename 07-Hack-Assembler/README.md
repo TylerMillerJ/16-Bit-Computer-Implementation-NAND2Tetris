@@ -4,11 +4,11 @@
 
 This project is the Hack Assembler for the Nand2Tetris course. It reads a `.asm` file containing a program written in Hack Assembly code, assembles it to machine language, and outputs a binary `.hack` file. The assembler uses a two-pass architecture: the first pass builds a complete symbol table (resolving labels and pre-existing direct memory references), and the second pass translates each instruction into 16-bit Hack machine code.
 
-The Hack platform addresses a 15-bit RAM space (2^15 = 32,768 locations), with the first 16 addresses (R0–R15) pre-allocated to predefined symbols; therefore, a valid Hack program can declare at most 32,752 unique variable symbols. The assembler enforces this limit and throws a runtime error if a program's symbol count would exceed the addressable range.
+The Hack platform's A-register can address a 15-bit space (2^15 = 32,768 locations), but physical RAM only spans addresses 0–24576, with the first 16 (R0–R15) pre-allocated to predefined symbols and addresses 16384–24576 reserved for the memory-mapped screen and keyboard. This leaves 16,368 addresses (16–16383) available for variable declarations. The assembler enforces this limit and throws a runtime error if a program's variable count would exceed it.
 
-The assembler achieves an average throughput of 5.63 million lines/second on a 1-million-line program, and 5.28 million lines/second on a 50-million-line program, both of which contained 30,000 symbols. More information is in the Performance section below.
+The assembler achieves an average throughput of 5.27 million lines/second on a 1-million-line program using 16,000 unique symbols, and 4.57 million lines/second on a 50-million-line program using 16,000 unique symbols combined with explicit label declarations. More information is in the Performance section below.
 
-Testing was completed on a 12th Gen Intel Core i7-1280P (14 cores / 20 threads, up to 4.8 GHz).
+The assembler is single-threaded and these figures were measured on a laptop with a 12th Gen Intel Core i7-1280P (14 cores / 20 threads — 6 performance, 8 efficiency — up to 4.8 GHz, 15 GB RAM) under Linux (kernel 7.1.8, Fedora 44).
 
 Nand2Tetris is openly available, teaching students to build a computer, starting with implementing logic gates in HDL, and building up to writing games and an operating system which runs on the computer. For more information, the course is available at [Nand2Tetris.com](https://www.nand2tetris.org) or on Coursera.
 
@@ -91,29 +91,43 @@ Test programs were provided by the Nand2Tetris course, with correct binary files
 
 I also created `./compareFiles`, which compares two files line by line, displaying the line number of any differences, taking the two files as arguments.
 
-Test programs can be found in the `01-TestPrograms` folder. The largest test program is `Pong.asm`, with 28,375 lines. The solution file is identical to the output from my assembler, translated to ASCII.
+Test programs can be found in the `01-TestPrograms` folder. The largest provided test program from the course is `Pong.asm`, with 28,375 lines, of which 27,483 are instructions. The solution file is identical to the output from my assembler, translated to ASCII.
 
 ### Performance
 
 I used `hyperfine` with 10 warmup runs and 1,000 benchmark runs to test assembling `Pong.asm`. The assembler achieved an average throughput of approximately 20.3 million lines per second, corresponding to an average execution time of 1.4 ms with a standard deviation of 0.2 ms. The assembler used 3,864 KB of memory — approximately 137 bytes per line.
 
-I benchmarked the assembler on two synthetic test files, both using 30,000 unique symbols — slightly below the maximum of 32,752 available addresses for a Hack program.
+I benchmarked the assembler on two synthetic test files, both using 16,000 unique symbols — slightly below the maximum of 16,368 available variable addresses for a Hack program. The two files exercise different parts of the assembler: LargeTest1M.asm tests only the variable-allocation path (symbols are referenced via @symbol but never declared with (LABEL) syntax, so every symbol is treated as an implicitly-declared variable), while LargeTest50M.asm additionally includes explicit label declarations, exercising the label-parsing path as well.
 
-`LargeTest1M.asm` contains 1,000,000 lines: 500,000 A-instructions referencing 30,000 unique symbols, and 500,000 random C-instructions. Using `hyperfine` with 10 warmup runs and 100 benchmark runs, the assembler achieved an average execution time of 177.7 ms with a standard deviation of 10.3 ms, corresponding to a throughput of approximately 5.63 million lines per second. The assembler used 5,816 KB of peak memory — approximately 5.96 bytes per line.
+LargeTest1M.asm contains 1,000,000 lines: 500,000 A-instructions referencing 16,000 unique symbols (all implicitly declared as variables, with no matching label declarations in the file), and 500,000 random C-instructions. Using hyperfine with 10 warmup runs and 100 benchmark runs, the assembler achieved an average execution time of 189.9 ms with a standard deviation of 19.8 ms, corresponding to a throughput of approximately 5.27 million lines per second. The assembler used 4,672 KB of peak memory — approximately 4.78 bytes per line.
 
-`LargeTest50M.asm` contains 50,000,000 lines: 30,000 unique symbols, 24,970,000 symbol-related lines, and 25,000,000 random C-instructions. Using `hyperfine` with 10 warmup runs and 100 benchmark runs, the assembler achieved an average execution time of 9.466 seconds with a standard deviation of 0.349 seconds, corresponding to a throughput of approximately 5.28 million lines per second. The assembler used 5,776 KB of peak memory — approximately 0.12 bytes per line.
+LargeTest50M.asm contains 50,000,000 lines: 16,000 explicit label declarations, 24,984,000 A-instructions referencing those labels, and 25,000,000 random C-instructions. Because the symbols here are declared with (LABEL) syntax rather than being introduced implicitly through use, this test additionally exercises the label-parsing path that LargeTest1M.asm does not. Using hyperfine with 10 warmup runs and 100 benchmark runs, the assembler achieved an average execution time of 10.949 seconds with a standard deviation of 0.544 seconds, corresponding to a throughput of approximately 4.57 million lines per second. The assembler used 4,824 KB of peak memory — approximately 0.099 bytes per line.
 
-These figures were measured on a laptop running a 12th Gen Intel Core i7-1280P (14 cores / 20 threads — 6 performance, 8 efficiency — up to 4.8 GHz, 15 GB RAM) under Linux (kernel 7.1.8, Fedora 44).
+The assembler is single-threaded and these figures were measured on a laptop with a 12th Gen Intel Core i7-1280P (14 cores / 20 threads — 6 performance, 8 efficiency — up to 4.8 GHz, 15 GB RAM) under Linux (kernel 7.1.8, Fedora 44). The full specification is listed for reproducibility, not because the workload was parallelized across it.
 
-## Future Work / Optimizations
+## Limitations
+- The assembler expects that the assembly file is error free and correctly written with Hack syntax
 
-Each of the following optimizations is being evaluated for future implementation in this assembler.
+-The assembler cannot proccess file paths, only direct files within the same directory as the exectuable
 
-### Symbol Table
+- There is limited error handling and built in testing to ensure that the output files are correctly built
 
-As the tests above indicated, the symbol table can be improved to increase the assembler's throughput, especially at scale.
 
-#### Method: Multi-Processing and Multi-Threading Hash Table Sharding
+## TODO
+
+- Use object-oriented design to create well-encapsulated classes.
+- Implement dead-register detection and storage reclamation.
+- Reduce duplicated logic, such as cleaning source lines during both the first and second passes.
+- Improve Error Handling
+  - Repeating line-cleaning may be preferable to storing cleaned lines or writing them to an intermediate file, since doing so would increase memory usage and I/O operations.
+- Allow users to provide directory paths, not only individual file paths.
+- Implement a multiprocessing architecture:
+  - One process identifies the type of each instruction line.
+  - The line is then dispatched to the appropriate processing worker.
+- Optimize the symbol table using multiprocessing and sharding.
+
+
+#### Method: Multi-Processing and Multi-Threading Hash Table Sharding Preliminary Test Results
 
 I tested a range of process and thread configurations, using input files ranging from 10,000 to 5 million lines, where each line contained a `<symbol, value>` pair stored in an `unordered_map`. The primary test file contained 1,000,000 lines and 432,220 unique symbols, meaning the workload contained a significant number of duplicate symbols.
 
@@ -133,13 +147,6 @@ Key results:
 | 5 processes → 5 maps → merge | 203.01 ms | 0.56× |
 | 5 processes → 1 shared/global map | 589.11 ms | 0.19× |
 
-### Redundant / Repeated Work Across Functions
-
-There is repeated logic, such as cleaning each line as it is read. This happens at the start of both the first and second pass, since the cleaned line is not currently saved. It's worth investigating whether saving cleaned lines to an intermediary (file or string) for reuse in the second pass would be faster, whether the architecture could be redesigned to reduce this work, or whether the current approach is already optimal.
-
-### Directories as Input
-
-In testing, I found that the `.asm` file must be in the same base directory as the assembler — it cannot be in a subdirectory, or the assembler will fail to read the file stream properly. Allowing input files within subdirectories would make this program more robust.
 
 ## Build & Usage
 
@@ -189,9 +196,3 @@ The `Pong.txt` file contained 98 line differences. These are attributable to a d
 | 0000000000110100 | 0000000000011011 | 52 | 27 |
 | 0000000000110101 | 0000000000011100 | 53 | 28 |
 | 0000000000111001 | 0000000000011101 | 57 | 29 |
-
-### 50-Million-Line Test
-
-Located in `/tests/scriptToGenerate50mLineTestFile/`, a shell script generates `LargeTest50M.asm`, containing 50 million lines: 2.5 million unique symbols, 25 million symbol-related lines, and 25 million random C-instructions.
-
-Assembling this file across 100 test runs averaged an execution time of 19.463 seconds, with a standard deviation of 5.813 seconds, using 182,796 KB of memory.
