@@ -127,7 +127,7 @@ The assembler is single-threaded and these figures were measured on a laptop wit
 - Optimize the symbol table using multiprocessing and sharding.
 
 
-#### Method: Multi-Processing and Hash Table Sharding Preliminary Test Results
+#### Method: Multi-Processing and Hash Table Sharding Plan
 
 To improve performance, I will be continuing to build this project, and implement and test a multi-proccessing architecture, where multiple proccesses read the input file in the first pass, and direct symbol table management to different proccessers using hash sharding. Next, in the second pass, a single proccess should iterate through the input file, directing handling of all A and C instructions to different procceses which handle the translation and writing to the output file.
 
