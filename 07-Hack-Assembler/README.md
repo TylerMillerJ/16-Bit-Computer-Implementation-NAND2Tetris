@@ -127,25 +127,9 @@ The assembler is single-threaded and these figures were measured on a laptop wit
 - Optimize the symbol table using multiprocessing and sharding.
 
 
-#### Method: Multi-Processing and Multi-Threading Hash Table Sharding Preliminary Test Results
+#### Method: Multi-Processing and Hash Table Sharding Preliminary Test Results
 
-I tested a range of process and thread configurations, using input files ranging from 10,000 to 5 million lines, where each line contained a `<symbol, value>` pair stored in an `unordered_map`. The primary test file contained 1,000,000 lines and 432,220 unique symbols, meaning the workload contained a significant number of duplicate symbols.
-
-Initial tests showed that simply adding processes and threads did not necessarily improve performance. I tested configurations where multiple workers inserted values into a shared global `unordered_map`, as well as configurations where each worker maintained its own `unordered_map`, merged at the end. The shared-map approach introduced significant contention, while the separate-map approach introduced overhead from maintaining and merging multiple symbol tables. In both cases, the overhead outweighed the benefits of parallelizing file processing and resulted in performance worse than the single-process baseline.
-
-I then implemented **hash sharding**, where the hash of each symbol determines which worker is responsible for it. For example, with 64 workers, a symbol is assigned via `hash(symbol) % 64`, giving each worker ownership of its own `unordered_map`. Because the same symbol always produces the same shard, all occurrences of a symbol — including duplicates — are handled by the same worker. This eliminates the need for a shared global map and avoids a final merge, since the correct map can always be determined from the symbol's hash during lookup.
-
-Across the configurations tested, approximately 3–4 processes with 10–16 threads per process provided the best performance. The best configuration was 4 processes × 16 threads (64 total workers, 64 hash-sharded maps), achieving an average processing time of 30.30 ms, compared with 114.62 ms for the current single-process, single-map implementation — an average **3.78× speedup** for the symbol-table construction benchmark. This may also help reduce the need for rehashing tables, since sizes will be moderated, though this is a point for further investigation.
-
-Key results:
-
-| Configuration | Avg. Time | Speedup vs. Baseline |
-|---|---|---|
-| 4 processes × 16 threads → hash % 64 → 64 sharded maps | 30.30 ms | 3.78× |
-| 1 process → 1 map | 114.62 ms | 1.00× |
-| 1 process → 5 maps | 194.35 ms | 0.59× |
-| 5 processes → 5 maps → merge | 203.01 ms | 0.56× |
-| 5 processes → 1 shared/global map | 589.11 ms | 0.19× |
+To improve performance, I will be continuing to build this project, and implement and test a multi-proccessing architecture, where multiple proccesses read the input file in the first pass, and direct symbol table management to different proccessers using hash sharding. Next, in the second pass, a single proccess should iterate through the input file, directing handling of all A and C instructions to different procceses which handle the translation and writing to the output file.
 
 
 ## Build & Usage
