@@ -18,7 +18,7 @@ Test files must be placed in the same folder as the assembler in order to work, 
 
 ```bash
 ./HackAssembler Add.asm
-
+```
 
 ## Architecture
 
