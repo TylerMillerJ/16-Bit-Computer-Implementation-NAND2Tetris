@@ -6,11 +6,19 @@ This project is the Hack Assembler for the Nand2Tetris course. It reads a `.asm`
 
 The Hack platform's A-register can address a 15-bit space (2^15 = 32,768 locations), but physical RAM only spans addresses 0–24576, with the first 16 (R0–R15) pre-allocated to predefined symbols and addresses 16384–24576 reserved for the memory-mapped screen and keyboard. This leaves 16,368 addresses (16–16383) available for variable declarations. The assembler enforces this limit and throws a runtime error if a program's variable count would exceed it.
 
-The assembler achieves an average throughput of 5.27 million lines/second on a 1-million-line program using 16,000 unique symbols, and 4.57 million lines/second on a 50-million-line program using 16,000 unique symbols combined with explicit label declarations. More information is in the Performance section below.
-
-The assembler is single-threaded and these figures were measured on a laptop with a 12th Gen Intel Core i7-1280P (14 cores / 20 threads — 6 performance, 8 efficiency — up to 4.8 GHz, 15 GB RAM) under Linux (kernel 7.1.8, Fedora 44).
+The assembler is single-threaded and was benchmarked on inputs ranging from the standard Nand2Tetris test programs to synthetic programs containing up to 50 million lines. On the largest tests, it processes several million source lines per second while maintaining relatively low memory usage. More information about the benchmark methodology, results, and scaling characteristics is provided in the [Performance / Scaling](#performance--scaling) section below.
 
 Nand2Tetris is openly available, teaching students to build a computer, starting with implementing logic gates in HDL, and building up to writing games and an operating system which runs on the computer. For more information, the course is available at [Nand2Tetris.com](https://www.nand2tetris.org) or on Coursera.
+
+## Build & Usage
+
+All source files are in the `/src` folder. The Makefile builds the project and tracks dependencies, placing object and dependency files in the `/build` folder. The executable is placed in the `/Assembler` base directory. Test assembly files are in the `/test/asmfiles` folder.
+
+Test files must be placed in the same folder as the assembler in order to work, so that the assembler can properly read the input file stream. It is run as follows:
+
+```bash
+./HackAssembler Add.asm
+
 
 ## Architecture
 
@@ -22,7 +30,7 @@ For more details about the Hack language specification and definitions of labels
 
 The symbol table is used to store all unique symbols that the Hack program uses. The assembler initializes it with all pre-defined symbols, and then, as the assembler reads a program, adds all new symbols to it. Symbols are stored as strings, and their value pairs are stored as 16-bit unsigned integers, since they represent line numbers and/or memory addresses up to 2^15. As the program translates each symbol to binary, it checks if the symbol is in the table and retrieves the value stored with that symbol.
 
-Since there are frequent lookups, I chose an `unordered_map` for its quick O(1) lookup time, which outweighs the disadvantage of needing to use a little more memory. One consideration to look into further is that, because we don't know how many symbols the table will need to store, it may frequently resize, which could impact performance.
+Since there are frequent lookups, I chose an `unordered_map` for its expected O(1) average lookup time, which outweighs the disadvantage of needing to use a little more memory. One consideration to look into further is that, because we don't know how many symbols the table will need to store, it may frequently resize, which could impact scaling and performance.
 
 #### File Opening and Creation
 
@@ -76,14 +84,14 @@ The Hack programmer can use A-instructions in several ways, best explained throu
 
 There are three types of symbols:
 - **Variables** — declared throughout the program, representing memory addresses the programmer wants to use.
-- **Predefined symbols** — predefined memory addresses the programmer may want to use to make their program more readable.
+- **Predefined symbols** — predefined memory addresses the programmer may want to use to make their programs more readable.
 - **Labels** — used for goto statements, representing the line number of an instruction. A label is declared using parentheses, e.g. `(LABEL)`, to mark the instruction line to jump to, and is used in the program by setting the A register via `@LABEL`, then writing code for the jump condition.
 
 ### C-Instructions
 
 C-instructions are a 16-bit binary bus where the first bit is set to `1`. Since the next two bits are unused, they are also set to `1`. There is a mandatory `comp` (computation) field, which defines the next 7 bits depending on the computation. Then there are two optional fields: `dest`, defining which RAM location stores the result of `comp` and ending in `=`, and `jump`, defining which comparison to use for a jump condition, such as `>`, `<`, `>=`, etc. If `dest` or `jump` are blank, the remaining 6 bits are `0`; otherwise their values correspond to the language specification table. The CPU reads these bits and uses them to run the program.
 
-## Testing, Validation, and Performance
+## Testing, Validation, and Performance / Scaling
 
 ### Testing
 
@@ -93,90 +101,94 @@ I also created `./compareFiles`, which compares two files line by line, displayi
 
 Test programs can be found in the `01-TestPrograms` folder. The largest provided test program from the course is `Pong.asm`, with 28,375 lines, of which 27,483 are instructions. The solution file is identical to the output from my assembler, translated to ASCII.
 
-### Performance
+### Performance / Scaling
 
-I used `hyperfine` with 10 warmup runs and 1,000 benchmark runs to test assembling `Pong.asm`. The assembler achieved an average throughput of approximately 20.3 million lines per second, corresponding to an average execution time of 1.4 ms with a standard deviation of 0.2 ms. The assembler used 3,864 KB of memory — approximately 137 bytes per line.
+The assembler is single-threaded, so the benchmark results primarily measure the efficiency of the implementation, data structures, parsing approach, and I/O rather than parallel hardware utilization.
 
-I benchmarked the assembler on two synthetic test files, both using 16,000 unique symbols — slightly below the maximum of 16,368 available variable addresses for a Hack program. The two files exercise different parts of the assembler: LargeTest1M.asm tests only the variable-allocation path (symbols are referenced via @symbol but never declared with (LABEL) syntax, so every symbol is treated as an implicitly-declared variable), while LargeTest50M.asm additionally includes explicit label declarations, exercising the label-parsing path as well.
+The benchmarks were designed to examine how the assembler behaves as input size and symbol-table usage increase. In particular, the synthetic tests were designed to approach the Hack platform's maximum number of available variable addresses while also increasing the total number of instructions by several orders of magnitude.
 
-LargeTest1M.asm contains 1,000,000 lines: 500,000 A-instructions referencing 16,000 unique symbols (all implicitly declared as variables, with no matching label declarations in the file), and 500,000 random C-instructions. Using hyperfine with 10 warmup runs and 100 benchmark runs, the assembler achieved an average execution time of 189.9 ms with a standard deviation of 19.8 ms, corresponding to a throughput of approximately 5.27 million lines per second. The assembler used 4,672 KB of peak memory — approximately 4.78 bytes per line.
+The standard `Pong.asm` test was benchmarked using `hyperfine` with 10 warmup runs and 1,000 benchmark runs. The assembler achieved an average execution time of approximately 1.4 ms with a standard deviation of 0.2 ms, corresponding to approximately 20.3 million input lines per second. The assembler used approximately 3,864 KB of memory.
 
-LargeTest50M.asm contains 50,000,000 lines: 16,000 explicit label declarations, 24,984,000 A-instructions referencing those labels, and 25,000,000 random C-instructions. Because the symbols here are declared with (LABEL) syntax rather than being introduced implicitly through use, this test additionally exercises the label-parsing path that LargeTest1M.asm does not. Using hyperfine with 10 warmup runs and 100 benchmark runs, the assembler achieved an average execution time of 10.949 seconds with a standard deviation of 0.544 seconds, corresponding to a throughput of approximately 4.57 million lines per second. The assembler used 4,824 KB of peak memory — approximately 0.099 bytes per line.
+Two larger synthetic programs were then used to examine scaling behavior.
 
-The assembler is single-threaded and these figures were measured on a laptop with a 12th Gen Intel Core i7-1280P (14 cores / 20 threads — 6 performance, 8 efficiency — up to 4.8 GHz, 15 GB RAM) under Linux (kernel 7.1.8, Fedora 44). The full specification is listed for reproducibility, not because the workload was parallelized across it.
+#### 1-Million-Line Test
+
+`LargeTest1M.asm` contains 1,000,000 lines:
+
+- 500,000 A-instructions referencing 16,000 unique symbols.
+- 500,000 random C-instructions.
+- No explicit label declarations.
+- All 16,000 symbols are therefore introduced implicitly as variables.
+
+Using `hyperfine` with 10 warmup runs and 100 benchmark runs, the assembler achieved:
+
+| Metric | Result |
+|---|---:|
+| Input size | 1,000,000 lines |
+| Unique symbols | 16,000 |
+| Average execution time | 189.9 ms |
+| Standard deviation | 19.8 ms |
+| Throughput | ~5.27 million lines/sec |
+| Peak memory | 4,672 KB |
+| Memory per input line | ~4.78 bytes |
+
+This test primarily exercises the variable-allocation path. Because the symbols are referenced but never explicitly declared with `(LABEL)` syntax, the assembler must resolve them as variables during the second pass.
+
+#### 50-Million-Line Test
+
+`LargeTest50M.asm` contains 50,000,000 lines:
+
+- 16,000 explicit label declarations.
+- 24,984,000 A-instructions referencing those labels.
+- 25,000,000 random C-instructions.
+
+This test exercises both the label-parsing path and the symbol lookup path while significantly increasing the total input size.
+
+Using `hyperfine` with 10 warmup runs and 100 benchmark runs, the assembler achieved:
+
+| Metric | Result |
+|---|---:|
+| Input size | 50,000,000 lines |
+| Unique symbols | 16,000 |
+| Average execution time | 10.949 s |
+| Standard deviation | 0.544 s |
+| Throughput | ~4.57 million lines/sec |
+| Peak memory | 4,824 KB |
+| Memory per input line | ~0.099 bytes |
+
+The reduction in throughput from approximately 5.27 million lines/sec on the 1-million-line test to approximately 4.57 million lines/sec on the 50-million-line test indicates that throughput is not perfectly constant as input size increases. This is expected for a workload dominated by parsing, symbol-table access, memory allocation, and file I/O.
+
+The important scaling characteristic is that memory usage remains relatively stable as the number of input lines increases. The 1-million-line test used approximately 4.7 MB of memory, while the 50-million-line test used approximately 4.8 MB. This is largely because the memory requirements are driven by the number of unique symbols and assembler state rather than by the total number of input lines processed.
+
+The synthetic tests use 16,000 unique symbols, which is slightly below the Hack platform's maximum of 16,368 available variable addresses. This was intentional so that the tests exercise a near-maximum symbol-table workload without exceeding the Hack memory model.
+
+### Benchmark Environment
+
+All benchmarks were run on a laptop with a 12th Gen Intel Core i7-1280P processor, consisting of 14 cores / 20 threads (6 performance cores and 8 efficiency cores), with a maximum clock speed of up to 4.8 GHz and 15 GB of RAM.
+
+The system was running Linux with kernel 7.1.8 on Fedora 44.
+
+The assembler itself is single-threaded and does not distribute the workload across the available CPU cores. Therefore, the hardware specification is provided primarily for reproducibility and context. The benchmark results should not be interpreted as a measurement of multi-core scaling or as a direct representation of the assembler's performance on other hardware.
+
+Because the benchmark is performed on a specific system, absolute execution times and throughput will vary depending on CPU performance, memory subsystem, storage performance, operating-system scheduling, compiler configuration, and other system conditions.
+
+The more useful scaling observations are therefore the relationship between input size, symbol count, memory usage, and execution time rather than the absolute throughput number on this particular machine.
 
 ## Limitations
-- The assembler expects that the assembly file is error free and correctly written with Hack syntax
 
--The assembler cannot proccess file paths, only direct files within the same directory as the exectuable
-
-- There is limited error handling and built in testing to ensure that the output files are correctly built
-
+- The assembler expects that the assembly file is error free and correctly written with Hack syntax.
+- The assembler cannot process file paths and currently only accepts files located in the same directory as the executable.
+- There is limited error handling and limited built-in testing to ensure that output files are correctly generated.
+- The assembler is currently single-threaded.
+- The current implementation does not support processing multiple assembly files in parallel.
 
 ## TODO
 
 - Use object-oriented design to create well-encapsulated classes.
 - Implement dead-register detection and storage reclamation.
 - Reduce duplicated logic, such as cleaning source lines during both the first and second passes.
-- Improve Error Handling
-  - Repeating line-cleaning may be preferable to storing cleaned lines or writing them to an intermediate file, since doing so would increase memory usage and I/O operations.
+- Improve error handling.
+- Investigate whether repeated line-cleaning should be replaced with a different approach. Repeating line-cleaning avoids storing cleaned lines or writing them to an intermediate file, which would increase memory usage and I/O operations.
 - Allow users to provide directory paths, not only individual file paths.
-- Implement a multiprocessing architecture:
-  - One process identifies the type of each instruction line.
-  - The line is then dispatched to the appropriate processing worker.
-- Optimize the symbol table using multiprocessing and sharding.
-
-
-#### Method: Multi-Processing and Hash Table Sharding Plan
-
-To improve performance, I will be continuing to build this project, and implement and test a multi-proccessing architecture, where multiple proccesses read the input file in the first pass, and direct symbol table management to different proccessers using hash sharding. Next, in the second pass, a single proccess should iterate through the input file, directing handling of all A and C instructions to different procceses which handle the translation and writing to the output file.
-
-
-## Build & Usage
-
-All source files are in the `/src` folder. The Makefile builds the project and tracks dependencies, placing object and dependency files in the `/build` folder. The executable is placed in the `/Assembler` base directory. Test assembly files are in the `/test/asmfiles` folder.
-
-Test files must be placed in the same folder as the assembler in order to work, so that the assembler can properly read the input file stream. It is run as follows:
-
-```
-./HackAssembler Add.asm
-```
-
-This creates the `.hack` output file in the same directory as the `./HackAssembler` executable.
-
-## Tools / Test Folder Usage
-
-Expected outputs can be found on the Nand2Tetris online IDE, and are also included in the `/test/expected-outputs` folder.
-
-Since this assembler outputs binary files instead of the ASCII files expected for the assignment, there is a program, `./binaryToText`, in the `/tools` folder, which iterates through the binary files folder and converts any files not already in the ASCII folder into their ASCII equivalent.
-
-`./compareFiles` iterates through the ASCII folder and the expected-output folder, comparing files line by line and outputting details: files compared, lines read, lines matched, lines different, and total lines read. If any lines differ, the line numbers are provided.
-
-The results of comparing all expected outputs against their assembled equivalents are in `results.txt`, or below:
-
-| Assembled Output | Test File | Lines Compared | Lines Equal | Lines Different |
-|---|---|---|---|---|
-| MaxLAssembled.txt | MaxL.txt | 16 | 16 | 0 |
-| PongLAssembled.txt | PongL.txt | 27,483 | 27,483 | 0 |
-| MaxAssembled.txt | Max.txt | 16 | 16 | 0 |
-| AddAssembled.txt | Add.txt | 6 | 6 | 0 |
-| PongAssembled.txt | Pong.txt | 27,483 | 27,385 | 98 |
-
-The `Pong.txt` file contained 98 line differences. These are attributable to a difference in assembler architecture: this version identifies all direct register accesses and ensures no symbols are assigned to those register values in the second pass, preventing register collisions. There is a 1-to-1 correspondence between the binary outputs, shown below:
-
-| Assembled Output | Test File | Assembled Register | Test Register |
-|---|---|---|---|
-| 0000000000010101 | 0000000000010000 | 21 | 16 |
-| 0000000000010111 | 0000000000010001 | 23 | 17 |
-| 0000000000011010 | 0000000000010010 | 26 | 18 |
-| 0000000000100100 | 0000000000010011 | 36 | 19 |
-| 0000000000100101 | 0000000000010100 | 37 | 20 |
-| 0000000000100111 | 0000000000010101 | 39 | 21 |
-| 0000000000101000 | 0000000000010110 | 40 | 22 |
-| 0000000000101001 | 0000000000010111 | 41 | 23 |
-| 0000000000101010 | 0000000000011000 | 42 | 24 |
-| 0000000000101110 | 0000000000011001 | 46 | 25 |
-| 0000000000101111 | 0000000000011010 | 47 | 26 |
-| 0000000000110100 | 0000000000011011 | 52 | 27 |
-| 0000000000110101 | 0000000000011100 | 53 | 28 |
-| 0000000000111001 | 0000000000011101 | 57 | 29 |
+- Investigate symbol-table preallocation to reduce potential `unordered_map` rehashing as the number of symbols increases.
+- Investigate whether further optimizations can improve scaling on very large input files.
