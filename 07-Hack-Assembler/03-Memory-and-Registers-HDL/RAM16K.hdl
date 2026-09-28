@@ -1,0 +1,37 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/3/b/RAM16K.hdl
+// Parts Implementation Completed by Tyler Miller
+
+/**
+ * Memory of 16K 16-bit registers.
+ * If load is asserted, the value of the register selected by
+ * address is set to in; Otherwise, the value does not change.
+ * The value of the selected register is emitted by out.
+ */
+
+ /*
+ * Note: The Hardware Simulator asserted that the bus size [3..13] was not
+ * the correct size and required size [2..13], despite the RAM64 - RAM4k
+ * requiring bus size [3-(n-1)]] where n = address size.
+ */
+
+CHIP RAM16K {
+    IN in[16], load, address[14];
+    OUT out[16];
+
+    PARTS:
+    
+    DMux8Way(in=load, sel=address[0..2], a=firstRam512Load, b=secondRam512Load, c=thirdRam512Load, d=fourthRam512Load, e=fifthRam512Load, f=sixthRam512Load, g=seventhRam512Load, h=eightRam512Load);
+    RAM4K(in=in, load=firstRam512Load, address=address[2..13], out=outFirstRam512Chip);
+    RAM4K(in=in, load=secondRam512Load, address=address[2..13], out=outSecondRam512Chip);
+    RAM4K(in=in, load=thirdRam512Load, address=address[2..13], out=outThirdRam512Chip);
+    RAM4K(in=in, load=fourthRam512Load, address=address[2..13], out=outFourthRam512Chip);
+    RAM4K(in=in, load=fifthRam512Load, address=address[2..13], out=outFifthRam512Chip);
+    RAM4K(in=in, load=sixthRam512Load, address=address[2..13], out=outSixthRam512Chip);
+    RAM4K(in=in, load=seventhRam512Load, address=address[2..13], out=outSeventhRam512Chip);
+    RAM4K(in=in, load=eightRam512Load, address=address[2..13], out=outEightRam512Chip);
+
+    Mux8Way16(a=outFirstRam512Chip, b=outSecondRam512Chip, c=outThirdRam512Chip, d=outFourthRam512Chip , e=outFifthRam512Chip, f=outSixthRam512Chip, g=outSeventhRam512Chip, h=outEightRam512Chip, sel=address[0..2], out=out);
+}
